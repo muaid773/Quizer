@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pydantic
+PyJWT
+python-multipart  # IF UPLOADING FILES
+python-dotenv
