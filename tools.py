@@ -52,5 +52,6 @@ async def send_email_async(to_email: str, code: str) -> None:
 async def generate_and_send_code(email: str) -> str:
     code = create_verification_code()
     await send_email_async(email, code)
-    print(f"[TOOLS] Generated code for {email}: {code}")
+    print(f"[TOOLS] Generated verification code for {email}: {code}")
     return code
+
