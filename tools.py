@@ -6,12 +6,12 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
-
 # ------------------ Configuration ------------------
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 CODE_LENGTH = 6
 CODE_EXPIRE_MINUTES = 3
+TEST_CODE = "123456" # this will be verfiy code for test
 # --------------------------------------------------
 
 def create_verification_code(length=CODE_LENGTH) -> str:
@@ -50,8 +50,8 @@ async def send_email_async(to_email: str, code: str) -> None:
     await loop.run_in_executor(None, send_email_sync, to_email, code)
 
 async def generate_and_send_code(email: str) -> str:
-    code = create_verification_code()
-    await send_email_async(email, code)
-    print(f"[TOOLS] Generated verification code for {email}: {code}")
-    return code
+    #code = create_verification_code()
+    #await send_email_async(email, code)
+    #print(f"[TOOLS] Generated verification code for {email}: {code}")
+    return TEST_CODE
 
