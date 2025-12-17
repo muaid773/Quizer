@@ -98,8 +98,7 @@ class DatabaseManager:
                     score_percent INTEGER DEFAULT 0,
                     gems_awarded INTEGER DEFAULT 0,
                     completed_at INTEGER,
-                    FOREIGN KEY(user_id) REFERENCES users(id),
-                    FOREIGN KEY(quiz_id) REFERENCES quizzes(id)
+                    UNIQUE(user_id, quiz_id)
                 );
             """)
             conn.commit()
@@ -148,10 +147,7 @@ class DatabaseManager:
                         "UPDATE users SET is_admin=? WHERE email=?",
                         (1, email,)
                     )
-                    row = cur.fetchone()
-                    if not row:
-                        return False
-                    return row[0] == 1
+                    return True
             return await loop.run_in_executor(None, query)
     
     async def is_account_not_active(self, email: str) -> bool:
@@ -322,6 +318,21 @@ class DatabaseManager:
                     return False
                 return True
         return await loop.run_in_executor(None, query)
+    
+    async def is_user_and_active_by_email(self, email: str):
+        loop = asyncio.get_running_loop()
+
+        def query():
+            with sqlite3.connect(self.DBpath, timeout=5) as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT id FROM users WHERE email=? AND account_status=? LIMIT 1",
+                    (email, ACTIVE)
+                )
+                return cur.fetchone() is not None
+
+        return await loop.run_in_executor(None, query)
+ 
     
     async def get_subject_payload(self, user_id: int) -> dict:
         """
@@ -647,6 +658,15 @@ class DatabaseManager:
             try:
                 with sqlite3.connect(self.DBpath, timeout=5) as conn:
                     cur = conn.cursor()
+                    cur.execute("""
+                        SELECT completed FROM user_quizzes
+                        WHERE user_id=? AND quiz_id=?
+                    """, (user_id, quiz_id))
+
+                    row = cur.fetchone()
+                    if row and row[0] == 1:
+                        return {"ok": False, "error": "quiz_already_completed"}
+
 
                     # user stars
                     cur.execute("SELECT stars FROM users WHERE id=?", (user_id,))
@@ -817,7 +837,12 @@ class DatabaseManager:
                         row = cur.fetchone()
                         gems = row[0] if row else 0
                     else:
-                        gems = 0  # لا يمنح جواهر إذا لم يجتاز
+                        gems = 0 
+                    cur.execute("SELECT gems FROM users WHERE id=?", (user_id,))
+                    row = cur.fetchone()
+                    current_gems = row[0] if row else 0
+                    new_gems = current_gems + gems
+                    cur.execute("UPDATE users SET gems=? WHERE id=?", (new_gems,user_id))#
 
                     completed = 1 if passed else 0
                     completed_at = int(datetime.now(timezone.utc).timestamp()) if passed else None
@@ -826,7 +851,8 @@ class DatabaseManager:
                         INSERT INTO user_quizzes
                         (user_id, quiz_id, completed, score, score_percent, gems_awarded, completed_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(user_id, quiz_id) DO UPDATE SET
+                        ON CONFLICT(user_id, quiz_id)
+                        DO UPDATE SET
                             completed=excluded.completed,
                             score=excluded.score,
                             score_percent=excluded.score_percent,
@@ -841,6 +867,7 @@ class DatabaseManager:
                         gems,
                         completed_at
                     ))
+
 
 
                     conn.commit()
@@ -903,52 +930,66 @@ class DatabaseManager:
         return await loop.run_in_executor(None, query)
 
 
-    async def reset_failed_quiz_answers(self, user_id: int, quiz_id: int):
-        """
-        Reset all answers for a failed quiz.
-        This function can be called after determining that the user failed the quiz.
-        It marks all answers as unanswered without deleting the rows.
-        """
+    async def reset_failed_quiz_answers(self, user_id: int, quiz_id: int) -> dict:
         loop = asyncio.get_running_loop()
+
         def query():
             try:
                 with self.db_lock, sqlite3.connect(self.DBpath, timeout=5) as conn:
+                    conn.row_factory = sqlite3.Row
                     cur = conn.cursor()
-
-                    # Optional: check if the user actually failed
-                    cur.execute("SELECT score_percent FROM user_quizzes WHERE user_id=? AND quiz_id=? LIMIT 1", (user_id, quiz_id))
-                    row = cur.fetchone()
-                    if row and row[0] >= 50:
-                        # User passed, no reset needed
-                        return {"ok": False, "error": "user_passed"}
-
-                    # Reset all user_answers for this quiz
+                    # Check if quiz is completed
                     cur.execute("""
-                        UPDATE user_answers
-                        SET selected_option_id=NULL,
-                            is_correct=NULL,
-                            answered_at=NULL
+                        SELECT completed FROM user_quizzes
                         WHERE user_id=? AND quiz_id=?
                     """, (user_id, quiz_id))
 
-                    # Optionally, reset the user_quizzes entry to mark as not completed
+                    row = cur.fetchone()
+                    if row and row[0] == 1:
+                        return {"ok": False, "error": "cannot reset completed quiz"}
+
+                    # Ensure user_quizzes row exists
+                    cur.execute("""
+                        INSERT OR IGNORE INTO user_quizzes (user_id, quiz_id)
+                        VALUES (?, ?)
+                    """, (user_id, quiz_id))
+
+                    # Reset answers
+                    cur.execute("""
+                        DELETE FROM user_answers
+                        WHERE user_id=? AND quiz_id=?
+                    """, (user_id, quiz_id))
+                    answers_reset = cur.rowcount
+
+                    # Reset quiz state
                     cur.execute("""
                         UPDATE user_quizzes
-                        SET completed=0,
-                            score=0,
-                            score_percent=0,
-                            gems_awarded=0,
-                            completed_at=NULL
-                        WHERE user_id=? AND quiz_id=?
+                        SET completed = 0,
+                            score = 0,
+                            score_percent = 0,
+                            gems_awarded = 0,
+                            completed_at = NULL
+                        WHERE user_id = ? AND quiz_id = ?
                     """, (user_id, quiz_id))
+                    quiz_reset = cur.rowcount
 
                     conn.commit()
-                    return {"ok": True, "message": "Answers reset successfully"}
+
+                    return {
+                        "ok": True,
+                        "answers_reset": answers_reset,
+                        "quiz_reset": quiz_reset
+                    }
 
             except Exception as e:
                 print("DB ERROR reset_failed_quiz_answers:", e)
-                return {"ok": False, "error": "db_error"}
+                return {
+                    "ok": False,
+                    "error": "db_error"
+                }
+
         return await loop.run_in_executor(None, query)
+
 
 
     # ------------------------
@@ -1253,3 +1294,115 @@ class DatabaseManager:
 
         return await loop.run_in_executor(None, query)
 
+
+
+
+
+
+def seed_initial_data(db_path):
+    with sqlite3.connect(db_path, timeout=5) as conn:
+        cur = conn.cursor()
+
+        # ---------- Subjects ----------
+        subjects = [
+            ("Physics",),
+            ("Chemistry",),
+            ("Biology",)
+        ]
+        cur.executemany(
+            "INSERT INTO subjects (title) VALUES (?)",
+            subjects
+        )
+
+        # Get subject ids
+        cur.execute("SELECT id, title FROM subjects")
+        subject_map = {title: sid for sid, title in cur.fetchall()}
+
+        # ---------- Quizzes ----------
+        quizzes = [
+            (subject_map["Physics"], "Basic Physics Quiz", 2),
+            (subject_map["Chemistry"], "Introduction to Chemistry", 2),
+        ]
+        cur.executemany(
+            "INSERT INTO quizzes (subject_id, title, gems_reward) VALUES (?, ?, ?)",
+            quizzes
+        )
+
+        # Get quiz ids
+        cur.execute("SELECT id, title FROM quizzes")
+        quiz_map = {title: qid for qid, title in cur.fetchall()}
+
+        # ---------- Questions ----------
+        questions = [
+            (
+                quiz_map["Basic Physics Quiz"],
+                "What is the unit of force?",
+                "multiple_choice",
+                1
+            ),
+            (
+                quiz_map["Introduction to Chemistry"],
+                "What is the chemical symbol for water?",
+                "multiple_choice",
+                1
+            ),
+        ]
+
+        cur.executemany(
+            """
+            INSERT INTO questions (quiz_id, question_text, question_type, stars_reward)
+            VALUES (?, ?, ?, ?)
+            """,
+            questions
+        )
+
+        # Get question ids
+        cur.execute("SELECT id, question_text FROM questions")
+        question_map = {text: qid for qid, text in cur.fetchall()}
+
+        # ---------- Options ----------
+        options_data = {
+            "What is the unit of force?": [
+                ("Newton", True),
+                ("Joule", False),
+                ("Watt", False),
+                ("Pascal", False),
+            ],
+            "What is the chemical symbol for water?": [
+                ("H2O", True),
+                ("CO2", False),
+                ("O2", False),
+                ("NaCl", False),
+            ]
+        }
+
+        for question_text, options in options_data.items():
+            qid = question_map[question_text]
+            correct_option_id = None
+
+            for text, is_correct in options:
+                cur.execute(
+                    """
+                    INSERT INTO question_options (question_id, option_text)
+                    VALUES (?, ?)
+                    """,
+                    (qid, text)
+                )
+                option_id = cur.lastrowid
+                if is_correct:
+                    correct_option_id = option_id
+
+            # Update correct option
+            cur.execute(
+                """
+                UPDATE questions
+                SET correct_option_id = ?
+                WHERE id = ?
+                """,
+                (correct_option_id, qid)
+            )
+
+        conn.commit()
+
+# seed_initial_data("server_data.db")
+print("=============")

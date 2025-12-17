@@ -245,7 +245,7 @@ async def get_quiz_data(quiz_id: int, user: UserIdentity = Depends(get_current_u
 # -------------------------
 # RESET FAILED QUIZ (FOR PENDING OR FAILED QUIZZES)
 # -------------------------
-@app.post("/quiz/{quiz_id}")
+@app.put("/quiz/{quiz_id}")
 async def reset_failed_quiz(quiz_id: int, user: UserIdentity = Depends(get_current_user)):
     """
     Reset a failed quiz for the user. 
@@ -302,12 +302,12 @@ async def buy_stars_route(package_name: str, user: UserIdentity = Depends(get_cu
 # ============================
 # ADMIN ROUTES (AUTH REQUIRED)
 # ============================
-@app.post("/admin/{admin_key}/{email}")
-async def get_subjects(admin_key:str, email:str, user: UserIdentity = Depends(get_current_user)):
-    is_active = await DATABASE.is_user_and_active(email)
+@app.post("/admin")
+async def get_subjects(admin_key:str = Form(...), email:str = Form(...), user: UserIdentity = Depends(get_current_user)):
+    is_active = await DATABASE.is_user_and_active_by_email(email)
     if is_active:
         if admin_key == ADMIN_KEY:
-            DATABASE.set_admin(email)
+            await DATABASE.set_admin(email)
             return {"ok":True, "message":f"'{email}' is an admin now"}
         return {"ok":False, "message":f"vaild admin key"}
     return {"ok":False, "message":f"'{email}' is not found"}
@@ -485,5 +485,5 @@ async def remove_quiz(quiz_id: int, user: UserIdentity = Depends(require_admin))
 async def remove_question(question_id: int, user: UserIdentity = Depends(require_admin)):
     deleted = await DATABASE.delete_question(question_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
+        raise HTTPException(status_code=404 , detail="Question not found")
     return {"ok": True, "id": question_id}

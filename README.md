@@ -50,6 +50,19 @@ APP_PASSWORD=your_app_password  # For SMTP email sending
 ADMIN_KEY=your_admin_secret_key
 ```
 
+
+## Frontend Dependency
+
+Quizer Frontend requires a compatible Backend API.
+
+The official Backend implementation is available here:
+
+[https://github.com/muaid773/Quizer.git](https://github.com/muaid773/Quizer.git)
+
+A complete setup typically includes:
+
+---
+
 **Explanation of variables:**
 
 * `SENDER_EMAIL`: Email address used to send verification codes to users.
@@ -77,11 +90,11 @@ uvicorn server:app --reload
 
 ```
 Quizer/
-├─ server.py          # Main FastAPI server
-├─ tools.py           # Utilities (email verification, code generation)
-├─ database_manager.py# Handles database interactions
-├─ .env               # Environment variables
-├─ requirements.txt   # Python dependencies
+├─ server.py           # Main FastAPI server
+├─ tools.py            # Utilities (email verification, code generation)
+├─ database_manager.py # Handles database interactions
+├─ .env                # Environment variables
+├─ requirements.txt    # Python dependencies
 └─ ...
 ```
 
