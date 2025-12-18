@@ -40,26 +40,51 @@ pip install -r requirements.txt
 
 ---
 
-## Configuration
+## Configuration — Environment Variables Explained
 
 Create a `.env` file in the project root with the following variables:
 
 ```env
-SENDER_EMAIL=your_email@example.com
-APP_PASSWORD=your_app_password  # For SMTP email sending
-ADMIN_KEY=your_admin_secret_key
+SENDER_EMAIL=your_email@example.com       # Email used to send verification codes to users
+APP_PASSWORD=your_app_password            # App Password for your email account (required for SMTP sending)
+SECRET_KEY=your_secret_key                # Secret key used for signing JWT tokens
+ADMIN_KEY=your_admin_secret_key           # Secret key that grants admin privileges
 ```
 
+### Detailed Explanation:
+
+* **`SENDER_EMAIL`**:
+  This is the email address from which verification codes will be sent to users. It must be a valid email that allows SMTP connections.
+
+* **`APP_PASSWORD`**:
+  Most email providers (Gmail, Outlook, etc.) require an **App Password** instead of your regular password for secure SMTP sending. This allows the backend to send verification emails without exposing your real password.
+
+* **`SECRET_KEY`**:
+  Used internally to **sign and verify JWT tokens** for user authentication. Keep this secret to protect user sessions.
+
+* **`ADMIN_KEY`**:
+  Special key used to **grant admin privileges**. Anyone who provides this key during registration or login can become an admin and access functionalities like managing quizzes, subjects, and users. Must be kept confidential.
+
+> **Note:** For testing purposes, email verification always uses the default code `123456`. To enable real email verification, configure `SENDER_EMAIL` and `APP_PASSWORD` and call `generate_and_send_code(email)` from `tools.py`.
+
+---
 
 ## Frontend Dependency
 
-Quizer Frontend requires a compatible Backend API.
+Quizer Backend can work with any compatible frontend.
 
-The official Backend implementation is available here:
+The official frontend implementation is available here:
 
-[https://github.com/muaid773/Quizer.git](https://github.com/muaid773/Quizer.git)
+[https://github.com/muaid773/Quizer-Frontend.git](https://github.com/muaid773/Quizer-frontend.git)
 
 A complete setup typically includes:
+
+* Deploying the Quizer Backend API on a server.
+* Deploying the frontend on:
+  * A public hosting service, or
+  * A local network server.
+* Ensuring the frontend points to this backend API.
+
 
 ---
 

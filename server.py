@@ -15,10 +15,11 @@ load_dotenv()
 # -------------------------
 # CONSTANTS & CONFIGURATION
 # -------------------------
-SECRET_KEY = "secret123"
+SECRET_KEY = os.environ.get("SECRET_KEY")
+ADMIN_KEY = os.environ.get("ADMIN_KEY") #this for admin to set as admin any account
+
 ALGORITHM = "HS256"
 REFILL_INTERVAL = 4 * 60 * 60  # 4 hours
-ADMIN_KEY = os.environ.get("ADMIN_KEY") #this for admin to set as admin any account
 # -------------------------
 # INITIALIZE APP & DATABASE
 # -------------------------
